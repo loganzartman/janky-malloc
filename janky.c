@@ -81,8 +81,22 @@ void* malloc(size_t size) {
 
 void free(void* ptr) {
   LOG("free\n");
+
   HNode* n = (HNode*) (ptr - sizeof(HNode));
   n->free = true;
+
+  HNode* start = n;
+  size_t reclaimed = n->size;
+
+  do {
+    n = next_node(n);
+    if (!n->free) {
+      break;
+    }
+    reclaimed += n->size + sizeof(HNode);
+  } while (n != start);
+
+  start->size = reclaimed;
 }
 
 void* realloc(void* ptr, size_t new_size) {

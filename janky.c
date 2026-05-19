@@ -6,14 +6,13 @@
 #define true 1
 #define false 0
 
-#define HEAP_SIZE 65536
+#define HEAP_SIZE 4096
 #define MIN_NODE_SIZE 8
 
 #define STR_MALLOC "malloc\n"
 #define STR_FREE "free\n"
 #define STR_REALLOC "realloc\n"
 #define STR_HEAP_OOM "heap OOM!\n"
-#define STR_COMPACT "compact!\n"
 
 typedef struct HNode {
   bool free;
@@ -26,6 +25,14 @@ static HNode* hhead = (HNode*) &heap;
 static HNode* hnext = (HNode*) &heap;
 static HNode* hend = (HNode*) (&heap[0] + HEAP_SIZE);
 
+HNode* next_node(HNode* node) {
+  node = ((void*) node) + sizeof(HNode) + node->size;
+  if (node > hend) {
+    node = hhead;
+  }
+  return node;
+}
+
 void* malloc(size_t size) {
   write(1, STR_MALLOC, sizeof(STR_MALLOC));
 
@@ -35,57 +42,39 @@ void* malloc(size_t size) {
     did_init = true;
   }
 
-  bool did_compact = false;
   HNode* next = hnext;
-  size_t total_free = 0;
 
   do {
-    do {
-      HNode* n = next;
+    HNode* n = next;
+    next = next_node(next);
 
-      // move pointer to next node
-      next = ((void*) next) + sizeof(HNode) + n->size;
-      if (next > hend) {
-        next = hhead;
-      }
-
-      if (!n->free) {
-        continue;
-      }
-
-      if (n->size < size) {
-        total_free += n->size;
-        continue;
-      }
-
-      // exact-size node (or not enough to split)
-      if (n->size < size + sizeof(HNode) + MIN_NODE_SIZE) {
-        hnext = next;
-        n->free = false;
-        return ((void*) n) + sizeof(HNode);
-      }
-      
-      // split node
-      size_t extra = n->size - size;
-      n->free = false;
-      n->size = size;
-      hnext = ((void*) n) + sizeof(HNode) + size;
-      hnext->free = true;
-      hnext->size = extra - sizeof(HNode);
-      return ((void*) n) + sizeof(HNode);
-    } while (next != hnext);
-
-    if (!did_compact && total_free >= size) {
-      write(1, STR_COMPACT, sizeof(STR_COMPACT));
-      exit(-1);
-      did_compact = true;
+    if (!n->free) {
       continue;
     }
-  } while (!did_compact);
+
+    if (n->size < size) {
+      continue;
+    }
+
+    // exact-size node (or not enough to split)
+    if (n->size < size + sizeof(HNode) + MIN_NODE_SIZE) {
+      hnext = next;
+      n->free = false;
+      return ((void*) n) + sizeof(HNode);
+    }
+    
+    // split node
+    size_t extra = n->size - size;
+    n->free = false;
+    n->size = size;
+    hnext = ((void*) n) + sizeof(HNode) + size;
+    hnext->free = true;
+    hnext->size = extra - sizeof(HNode);
+    return ((void*) n) + sizeof(HNode);
+  } while (next != hnext);
 
   write(1, STR_HEAP_OOM, sizeof(STR_HEAP_OOM));
-  exit(-1);
-  return 0;
+  return NULL;
 }
 
 void free(void* ptr) {
@@ -113,17 +102,35 @@ void* realloc(void* ptr, size_t new_size) {
   return allocated;
 }
 
+void print_heap() {
+  HNode* n = hhead;
+  bool first = true;
+  do {
+    printf(" | ");
+    printf(n->free ? " " : "\x1b[7m ");
+    printf("%d", n->size);
+    printf(n->free ? " " : " \x1b[0m");
+
+    n = next_node(n);
+  } while (n != hhead);
+  printf(" | \n");
+}
+
 int main(int argc, char const *argv[]) {
-  while (true) {
+  int result = 0;
+  do {
     printf("> ");
 
-    char* line = NULL;
-    size_t size = 0;
-    getline(&line, &size, stdin);
+    char* line;
+    size_t size;
+    result = getline(&line, &size, stdin);
 
     printf(line);
     printf("\n");
-  }
 
+    free(line);
+  } while (result > 0);
+
+  print_heap();
   return 0;
 }

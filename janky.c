@@ -9,10 +9,12 @@
 #define HEAP_SIZE 4096
 #define MIN_NODE_SIZE 8
 
-#define STR_MALLOC "malloc\n"
-#define STR_FREE "free\n"
-#define STR_REALLOC "realloc\n"
-#define STR_HEAP_OOM "heap OOM!\n"
+#define DEBUG
+#ifdef DEBUG
+#define LOG(S) write(1, S, sizeof(S) - 1)
+#else
+#define LOG(S)
+#endif
 
 typedef struct HNode {
   bool free;
@@ -34,7 +36,7 @@ HNode* next_node(HNode* node) {
 }
 
 void* malloc(size_t size) {
-  write(1, STR_MALLOC, sizeof(STR_MALLOC));
+  LOG("malloc\n");
 
   if (!did_init) {
     hhead->free = true;
@@ -73,18 +75,18 @@ void* malloc(size_t size) {
     return ((void*) n) + sizeof(HNode);
   } while (next != hnext);
 
-  write(1, STR_HEAP_OOM, sizeof(STR_HEAP_OOM));
+  LOG("heap oom!\n");
   return NULL;
 }
 
 void free(void* ptr) {
-  write(1, STR_FREE, sizeof(STR_FREE));
+  LOG("free\n");
   HNode* n = (HNode*) (ptr - sizeof(HNode));
   n->free = true;
 }
 
 void* realloc(void* ptr, size_t new_size) {
-  write(1, STR_REALLOC, sizeof(STR_REALLOC));
+  LOG("realloc\n");
 
   void* allocated = malloc(new_size);
 

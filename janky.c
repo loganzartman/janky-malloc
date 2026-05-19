@@ -1,24 +1,23 @@
-long write(int fd, const void* buf, unsigned long count);
-int printf(const char *format, ...);
-void exit(int code);
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define uint unsigned int
 #define bool char
 #define true 1
 #define false 0
 
-#define STDIN 0
-#define STDOUT 1
 #define HEAP_SIZE 65536
 #define MIN_NODE_SIZE 8
 
 #define STR_MALLOC "malloc\n"
+#define STR_FREE "free\n"
+#define STR_REALLOC "realloc\n"
 #define STR_HEAP_OOM "heap OOM!\n"
 #define STR_COMPACT "compact!\n"
 
 typedef struct HNode {
   bool free;
-  uint size;
+  size_t size;
 } HNode;
 
 static bool did_init = false;
@@ -27,8 +26,8 @@ static HNode* hhead = (HNode*) &heap;
 static HNode* hnext = (HNode*) &heap;
 static HNode* hend = (HNode*) (&heap[0] + HEAP_SIZE);
 
-void* malloc(uint size) {
-  write(STDOUT, STR_MALLOC, sizeof(STR_MALLOC));
+void* malloc(size_t size) {
+  write(1, STR_MALLOC, sizeof(STR_MALLOC));
 
   if (!did_init) {
     hhead->free = true;
@@ -38,14 +37,14 @@ void* malloc(uint size) {
 
   bool did_compact = false;
   HNode* next = hnext;
-  uint total_free = 0;
+  size_t total_free = 0;
 
   do {
     do {
       HNode* n = next;
 
       // move pointer to next node
-      next += sizeof(HNode) + n->size;
+      next = ((void*) next) + sizeof(HNode) + n->size;
       if (next > hend) {
         next = hhead;
       }
@@ -63,41 +62,68 @@ void* malloc(uint size) {
       if (n->size < size + sizeof(HNode) + MIN_NODE_SIZE) {
         hnext = next;
         n->free = false;
-        return n + sizeof(HNode);
+        return ((void*) n) + sizeof(HNode);
       }
       
       // split node
-      uint extra = n->size - size;
+      size_t extra = n->size - size;
       n->free = false;
       n->size = size;
-      hnext = n + sizeof(HNode) + size;
+      hnext = ((void*) n) + sizeof(HNode) + size;
       hnext->free = true;
       hnext->size = extra - sizeof(HNode);
-      return n + sizeof(HNode);
+      return ((void*) n) + sizeof(HNode);
     } while (next != hnext);
 
     if (!did_compact && total_free >= size) {
-      write(STDOUT, STR_COMPACT, sizeof(STR_COMPACT)); 
+      write(1, STR_COMPACT, sizeof(STR_COMPACT));
       exit(-1);
       did_compact = true;
       continue;
     }
   } while (!did_compact);
 
-  write(STDOUT, STR_HEAP_OOM, sizeof(STR_HEAP_OOM));
+  write(1, STR_HEAP_OOM, sizeof(STR_HEAP_OOM));
   exit(-1);
   return 0;
 }
 
-int main(int argc, char const *argv[]) {
-  char* str = malloc(16);
+void free(void* ptr) {
+  write(1, STR_FREE, sizeof(STR_FREE));
+  HNode* n = (HNode*) (ptr - sizeof(HNode));
+  n->free = true;
+}
 
-  for (uint i = 0; i < 15; ++i) {
-    str[i] = 'A' + i;
+void* realloc(void* ptr, size_t new_size) {
+  write(1, STR_REALLOC, sizeof(STR_REALLOC));
+
+  void* allocated = malloc(new_size);
+
+  if (ptr != NULL) {
+    HNode* existing = (HNode*) (ptr - sizeof(HNode));
+
+    size_t size = existing->size < new_size 
+      ? existing->size 
+      : new_size;
+
+    memcpy(allocated, ptr, size);
+    free(ptr);
   }
-  str[15] = '\n';
 
-  printf(str);
+  return allocated;
+}
+
+int main(int argc, char const *argv[]) {
+  while (true) {
+    printf("> ");
+
+    char* line = NULL;
+    size_t size = 0;
+    getline(&line, &size, stdin);
+
+    printf(line);
+    printf("\n");
+  }
 
   return 0;
 }
